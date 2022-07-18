@@ -8,12 +8,12 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config):
+    def __init__(self, model, criterions, metric_ftns, optimizer, config):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
         self.model = model
-        self.criterion = criterion
+        self.criterions = criterions
         self.metric_ftns = metric_ftns
         self.optimizer = optimizer
 

@@ -1,17 +1,18 @@
 import numpy as np
 import torch
+import math
 from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
-
+from utils.util import get_tile_bbox
 
 class Trainer(BaseTrainer):
     """
     Trainer class
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
-                 data_loader, valid_data_loader=None, lr_scheduler=None, len_epoch=None):
-        super().__init__(model, criterion, metric_ftns, optimizer, config)
+    def __init__(self, model, criterions, metric_ftns, optimizer, config, device,
+                 data_loader, valid_data_loader=None, lr_scheduler=None, len_epoch=None, grad_scaler=None):
+        super().__init__(model, criterions, metric_ftns, optimizer, config)
         self.config = config
         self.device = device
         self.data_loader = data_loader
@@ -25,6 +26,7 @@ class Trainer(BaseTrainer):
         self.valid_data_loader = valid_data_loader
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
+        self.grad_scaler = grad_scaler
         self.log_step = int(np.sqrt(data_loader.batch_size))
 
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
@@ -39,26 +41,37 @@ class Trainer(BaseTrainer):
         """
         self.model.train()
         self.train_metrics.reset()
-        for batch_idx, (data, target) in enumerate(self.data_loader):
-            data, target = data.to(self.device), target.to(self.device)
+        for batch_idx, data in enumerate(self.data_loader):
+            img, mask = data['image'], data['mask']
+            img, mask = img.to(self.device), mask.to(self.device)
 
-            self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
-            loss.backward()
-            self.optimizer.step()
+            with torch.cuda.amp.autocast(enabled=self.config['amp']['args']['enabled']):
+                output = self.model(img)
+                loss = 0
+                for criterion in self.criterions:
+                    loss += criterion(output, mask)
+                #loss = torch.sum(torch.Tensor([criterion(output, mask) for criterion in self.criterions]))
+
+            self.optimizer.zero_grad(set_to_none=True)
+            if self.grad_scaler:
+                self.grad_scaler.scale(loss).backward()
+                self.grad_scaler.step(self.optimizer)
+                self.grad_scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target))
+                self.train_metrics.update(met.__name__, met(output, mask))
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx),
                     loss.item()))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                self.writer.add_image('input', make_grid(img.cpu(), nrow=8, normalize=True))
 
             if batch_idx == self.len_epoch:
                 break
@@ -81,17 +94,35 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         self.valid_metrics.reset()
-        with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(self.valid_data_loader):
-                data, target = data.to(self.device), target.to(self.device)
 
-                output = self.model(data)
-                loss = self.criterion(output, target)
+        image_size = self.config.data_loader.args.image_size
+        tile_size = self.config.data_loader.args.tile_size
+        tile_h = math.ceil( image_size / tile_size )
+        with torch.no_grad():
+            whole_output = torch.zeros(image_size, image_size)
+            whole_mask = torch.zeros(image_size, image_size)
+            cur_name = ''
+            for batch_idx, data in enumerate(self.valid_data_loader):
+                img, mask, name, tile_ids = data['image'], data['mask'], data['name'], data['tile_id']
+                img, mask = img.to(self.device), mask.to(self.device)
+                if cur_name != name:
+                    whole_output = torch.zeros(image_size, image_size)
+                    whole_mask = torch.zeros(image_size, image_size)
+
+                output = self.model(img)
+                loss = 0
+                for criterion in self.criterions:
+                    loss += criterion(output, mask)
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
-                for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, target))
+                for i, tid in enumerate(tile_ids):
+                    y1, y2, x1, x2 = get_tile_bbox(image_size, tile_size, tid, False)
+                    whole_output[ i, :, y1 : y2, x1 : x2 ] = output
+                    whole_mask[ i, y1 : y2, x1 : x2 ] = mask
+
+                    for met in self.metric_ftns:
+                        self.valid_metrics.update(met.__name__, met(output, mask))
                 self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard
