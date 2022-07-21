@@ -1,6 +1,6 @@
 from torchvision import datasets, transforms
 from base import BaseDataLoader
-from .dataset import HBMapDataset
+from .dataset import HBMapDataset, HBMapTileDataset
 
 
 class MnistDataLoader(BaseDataLoader):
@@ -19,11 +19,30 @@ class MnistDataLoader(BaseDataLoader):
 
 class HBMapDataLoader(BaseDataLoader):
     """
-    MNIST data loading demo using BaseDataLoader
+    HuBMAP data loading
+    """
+    def __init__(self, images_dir: str, masks_dir: str, split: str, batch_size: int, image_size: int, shuffle: bool, num_workers=1):
+        tfms = transforms.Compose([
+            transforms.RandomResizedCrop(image_size),
+            transforms.ToTensor()
+        ])
+
+        target_tfms = transforms.Compose([
+            transforms.RandomResizedCrop(image_size),
+            transforms.ToTensor()
+        ])
+
+        self.dataset = HBMapDataset(split, images_dir, masks_dir, tfms=tfms, target_tfms=target_tfms)
+        super().__init__(self.dataset, batch_size, shuffle, 0.0, num_workers)
+
+
+class HBMapTileDataLoader(BaseDataLoader):
+    """
+    HuBMAP tile data loading
     """
     def __init__(self, batch_size, image_size, tile_size, split='train', num_workers=1):
         images_dir = '/data/' + split + '_split_images'
         masks_dir = '/data/' + split + '_split_masks'
         shuffle = split == 'train'
-        self.dataset = HBMapDataset(split, images_dir, masks_dir, image_size, tile_size)
+        self.dataset = HBMapTileDataset(split, images_dir, masks_dir, image_size, tile_size)
         super().__init__(self.dataset, batch_size, shuffle, 0.0, num_workers)
