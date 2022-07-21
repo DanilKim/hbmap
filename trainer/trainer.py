@@ -1,9 +1,10 @@
 import numpy as np
 import torch
-import math
+import torch.nn.functional as F
 from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
+from utils.dice_score import multiclass_dice_coeff
 from utils.util import get_tile_bbox
 
 class Trainer(BaseTrainer):
@@ -94,40 +95,34 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         self.valid_metrics.reset()
-
-        image_size = self.config.data_loader.args.image_size
-        tile_size = self.config.data_loader.args.tile_size
-        tile_h = math.ceil( image_size / tile_size )
+        dice_score = 0
         with torch.no_grad():
-            whole_output = torch.zeros(image_size, image_size)
-            whole_mask = torch.zeros(image_size, image_size)
-            cur_name = ''
             for batch_idx, data in enumerate(self.valid_data_loader):
-                img, mask, name, tile_ids = data['image'], data['mask'], data['name'], data['tile_id']
-                img, mask = img.to(self.device), mask.to(self.device)
-                if cur_name != name:
-                    whole_output = torch.zeros(image_size, image_size)
-                    whole_mask = torch.zeros(image_size, image_size)
+                image, mask_true = data['image'], data['mask']
+                image, mask_true = image.to(self.device), mask_true.to(torch.int64).to(self.device)
+                mask_true = F.one_hot(mask_true.squeeze(1), self.model.n_classes).permute(0, 3, 1, 2).float()
 
-                output = self.model(img)
-                loss = 0
-                for criterion in self.criterions:
-                    loss += criterion(output, mask)
+                output = self.model(image)
+                output = F.one_hot(output.argmax(dim=1), self.model.n_classes).permute(0, 3, 1, 2).float()
 
-                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
-                self.valid_metrics.update('loss', loss.item())
-                for i, tid in enumerate(tile_ids):
-                    y1, y2, x1, x2 = get_tile_bbox(image_size, tile_size, tid, False)
-                    whole_output[ i, :, y1 : y2, x1 : x2 ] = output
-                    whole_mask[ i, y1 : y2, x1 : x2 ] = mask
+                dice_score += multiclass_dice_coeff(output[:, 1:, ...], mask_true[:, 1:, ...], reduce_batch_first=False)
 
-                    for met in self.metric_ftns:
-                        self.valid_metrics.update(met.__name__, met(output, mask))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                # loss = self.criterion(output, mask_true)
+
+                # self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
+                # self.valid_metrics.update('loss', loss.item())
+                # for met in self.metric_ftns:
+                    # self.valid_metrics.update(met.__name__, met(output, mask_true))
+                # self.writer.add_image('input', make_grid(image.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():
             self.writer.add_histogram(name, p, bins='auto')
+
+        self.logger.debug('Train Epoch: {} Dice Score: {:.6f}'.format(
+                    epoch,
+                    dice_score / len(self.valid_data_loader)))
+
         return self.valid_metrics.result()
 
     def _progress(self, batch_idx):
