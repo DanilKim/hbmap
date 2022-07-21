@@ -1,21 +1,22 @@
 {
     "name": "hbmap_UNet",
-    "n_gpu": 2,
+    "n_gpu": 1,
 
     "arch": {
         "type": "UNet",
         "args": {
             "n_channels": 3,
-            "n_classes": 1
+            "n_classes": 2
         }
     },
     "data_loader": {
         "type": "HBMapDataLoader",
         "args":{
+            "images_dir": "data/train_images",
+            "masks_dir": "data/train_masks",
             "batch_size": 4,
-            "image_size": 3072,
-            "tile_size": 1024,
-            "num_workers": 2
+            "image_size": 512,
+            "num_workers": 4
         }
     },
     "optimizer": {
