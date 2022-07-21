@@ -1,4 +1,5 @@
 import logging
+import os
 from os import listdir
 from os.path import splitext
 from pathlib import Path
@@ -12,6 +13,42 @@ from utils.util import get_tile_bbox
 
 
 class HBMapDataset(Dataset):
+    def __init__(self, split: str, images_dir: str, masks_dir: str, tfms=None, target_tfms=None) -> None:
+        self.split = split
+        self.images_dir = Path(images_dir)
+        self.masks_dir = Path(masks_dir)
+        self.tfms = tfms
+        self.target_tfms = target_tfms
+
+        with open(self.split, 'r') as f:
+            self.ids = [x.strip() for x in f.readlines()]
+        if not self.ids:
+            raise RuntimeError(f'No input file found in {split}, make sure you put your images there')
+        logging.info(f'Creating dataset with {len(self.ids)} examples')
+    
+    def __len__(self):
+        return len(self.ids)
+    
+    def __getitem__(self, idx):
+        fname = self.ids[idx]
+        img = Image.open(os.path.join(self.images_dir, fname+'.tiff'))
+        mask = Image.open(os.path.join(self.masks_dir, fname+'.png'))
+        if self.tfms:
+            img = self.tfms(img)
+        if self.target_tfms:
+            mask = self.tfms(mask)
+
+        assert img.shape[1:] == mask.shape[1:], \
+            f'Image and mask {fname} should be the same size, but are {img.shape} and {mask.shape}'
+
+        return {
+            'image': img,
+            'mask': mask,
+            'name': fname,
+        }
+
+
+class HBMapTileDataset(Dataset):
     def __init__(self, split, images_dir: str, masks_dir: str, image_size: int, tile_size: int, mask_suffix: str = ''):
         self.images_dir = Path(images_dir)
         self.masks_dir = Path(masks_dir)
