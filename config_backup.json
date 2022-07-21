@@ -1,0 +1,61 @@
+{
+    "name": "hbmap_UNet",
+    "n_gpu": 2,
+
+    "arch": {
+        "type": "UNet",
+        "args": {
+            "n_channels": 3,
+            "n_classes": 1
+        }
+    },
+    "data_loader": {
+        "type": "HBMapDataLoader",
+        "args":{
+            "batch_size": 4,
+            "image_size": 3072,
+            "tile_size": 1024,
+            "num_workers": 2
+        }
+    },
+    "optimizer": {
+        "type": "RMSprop",
+        "args":{
+            "lr": 1e-5,
+            "weight_decay": 1e-8,
+            "momentum": 0.9
+        }
+    },
+    "loss": [
+        "XE_loss",
+        "dice_loss"
+    ],
+    "metrics": [
+        "dice_score"
+    ],
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "mode": "max",
+            "patience": 2
+        }
+    },
+    "amp": {
+        "type": "GradScaler",
+        "args": {
+            "enabled": false
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+
+        "save_dir": "saved/",
+        "save_period": 1,
+        "verbosity": 2,
+        
+        "monitor": "min val_loss",
+        "early_stop": 10,
+
+        "tensorboard": true
+    }
+}
