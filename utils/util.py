@@ -1,5 +1,4 @@
 import json
-import math
 import torch
 import pandas as pd
 from pathlib import Path
@@ -43,23 +42,6 @@ def prepare_device(n_gpu_use):
     device = torch.device('cuda:0' if n_gpu_use > 0 else 'cpu')
     list_ids = list(range(n_gpu_use))
     return device, list_ids
-
-def get_tile_bbox(image_size, tile_size, tile_id, overlap=True):
-    step_size = int(tile_size / 2) if overlap else tile_size
-    #print(step_size)
-    tile_h = math.ceil( image_size / step_size )
-
-    tid_h = int( tile_id / tile_h )
-    tid_w = tile_id % tile_h
-
-    my = max(image_size, tid_h * step_size + tile_size) - image_size
-    mx = max(image_size, tid_w * step_size + tile_size) - image_size
-    y1 = tid_h * step_size - my
-    y2 = y1 + tile_size
-    x1 = tid_w * step_size - mx
-    x2 = x1 + tile_size
-    #print(tile_id, tile_h, tid_h, tid_w, y1, y2, x1, x2)
-    return y1, y2, x1, x2
 
 class MetricTracker:
     def __init__(self, *keys, writer=None):
