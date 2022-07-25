@@ -1,24 +1,6 @@
 import torch
+import torch.nn.functional as F
 from torch import Tensor
-
-
-def accuracy(output, target):
-    with torch.no_grad():
-        pred = torch.argmax(output, dim=1)
-        assert pred.shape[0] == len(target)
-        correct = 0
-        correct += torch.sum(pred == target).item()
-    return correct / len(target)
-
-
-def top_k_acc(output, target, k=3):
-    with torch.no_grad():
-        pred = torch.topk(output, k, dim=1)[1]
-        assert pred.shape[0] == len(target)
-        correct = 0
-        for i in range(k):
-            correct += torch.sum(pred[:, i] == target).item()
-    return correct / len(target)
 
 
 def dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon=1e-6):
@@ -52,7 +34,10 @@ def multiclass_dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: boo
     return dice / input.shape[1]
 
 
-def dice_score(output: Tensor, target: Tensor, n_classes: int = 1):
+def dice_score(output: Tensor, target: Tensor, multiclass: bool = True):
+    output = F.softmax(output, dim=1).float()
+    target = F.one_hot(target, output.size(1)).permute(0, 3, 1, 2).float()
+
     assert output.size() == target.size()
-    fn = multiclass_dice_coeff if n_classes > 1 else dice_coeff
-    return fn(output, target, reduce_batch_first=False)
+    fn = multiclass_dice_coeff if multiclass else dice_coeff
+    return fn(output, target, reduce_batch_first=False).item()

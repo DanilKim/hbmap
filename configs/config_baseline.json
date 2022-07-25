@@ -1,0 +1,67 @@
+{
+    "name": "HBMap_UNet",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "UNet",
+        "args": {
+            "n_channels": 3,
+            "n_classes": 2
+        }
+    },
+    "data_loader": {
+        "type": "HBMapDataLoader",
+        "args":{
+            "images_dir": "/data/train_images",
+            "masks_dir": "/data/train_masks",
+            "split_file": "/data/train.txt",
+            "shuffle": true,
+            "batch_size": 4,
+            "image_size": 1024,
+            "num_workers": 2
+        }
+    },
+    "valid_data_loader": {
+        "type": "HBMapDataLoader",
+        "args":{
+            "images_dir": "/data/train_images",
+            "masks_dir": "/data/train_masks",
+            "split_file": "/data/val.txt",
+            "shuffle": false,
+            "batch_size": 1,
+            "image_size": 1024,
+            "num_workers": 2
+        }
+    },
+    "optimizer": {
+        "type": "RMSprop",
+        "args":{
+            "lr": 1e-4,
+            "weight_decay": 1e-8,
+            "momentum": 0.9
+        }
+    },
+    "loss": "ce_with_dice_loss",
+    "metrics": [
+        "dice_score"
+    ],
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "mode": "max",
+            "patience": 2
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+
+        "save_dir": "saved/",
+        "save_period": 1,
+        "verbosity": 2,
+        
+        "monitor": "min val_loss",
+        "early_stop": 10,
+
+        "tensorboard": true
+    }
+}
