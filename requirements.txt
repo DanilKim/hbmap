@@ -5,3 +5,4 @@ tqdm
 tensorboard>=1.14
 pandas
 ipykernel
+matplotlib

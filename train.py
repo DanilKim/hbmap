@@ -1,8 +1,9 @@
 import argparse
 import collections
+from random import shuffle
 import torch
 import numpy as np
-import data_loader.data_loaders as module_data
+import data_loader as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model as module_arch
@@ -23,7 +24,7 @@ def main(config):
 
     # setup data_loader instances
     data_loader = config.init_obj('data_loader', module_data)
-    valid_data_loader = data_loader.split_validation()
+    valid_data_loader = config.init_obj('valid_data_loader', module_data)
 
     # build model architecture, then print to console
     model = config.init_obj('arch', module_arch)

@@ -3,6 +3,9 @@ import torch
 from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
+from utils.tile_utils import image2tile, tile2image
+from PIL import Image
+from torchvision import transforms
 
 
 class Trainer(BaseTrainer):
@@ -30,6 +33,9 @@ class Trainer(BaseTrainer):
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
 
+        self.tile_validation = (self.config["data_loader"]["type"] == "HBMapTileDataLoader")
+        print(f'tile validation: {self.tile_validation}')
+
     def _train_epoch(self, epoch):
         """
         Training logic for an epoch
@@ -39,19 +45,20 @@ class Trainer(BaseTrainer):
         """
         self.model.train()
         self.train_metrics.reset()
-        for batch_idx, (data, target) in enumerate(self.data_loader):
-            data, target = data.to(self.device), target.to(self.device)
+        for batch_idx, data in enumerate(self.data_loader):
+            img, mask = data["image"], data["mask"]
+            img, mask = img.to(self.device), mask.to(self.device)
 
             self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
+            output = self.model(img)
+            loss = self.criterion(output, mask)
             loss.backward()
             self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target))
+                self.train_metrics.update(met.__name__, met(output, mask))
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
@@ -64,13 +71,18 @@ class Trainer(BaseTrainer):
                 break
         log = self.train_metrics.result()
 
-        if self.do_validation:
+        if self.do_validation and (not self.tile_validation):
             val_log = self._valid_epoch(epoch)
+            log.update(**{'val_'+k : v for k, v in val_log.items()})
+        
+        elif self.do_validation and self.tile_validation:
+            val_log = self._valid_epoch_tile(epoch)
             log.update(**{'val_'+k : v for k, v in val_log.items()})
 
         if self.lr_scheduler is not None:
-            self.lr_scheduler.step()
+            self.lr_scheduler.step(val_log['dice_score'])
         return log
+
 
     def _valid_epoch(self, epoch):
         """
@@ -82,17 +94,68 @@ class Trainer(BaseTrainer):
         self.model.eval()
         self.valid_metrics.reset()
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(self.valid_data_loader):
-                data, target = data.to(self.device), target.to(self.device)
+            for batch_idx, data in enumerate(self.valid_data_loader):
+                img, mask = data["image"], data["mask"]
+                img, mask = img.to(self.device), mask.to(self.device)
 
-                output = self.model(data)
-                loss = self.criterion(output, target)
+                output = self.model(img)
+                loss = self.criterion(output, mask)
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
                 for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, target))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                    self.valid_metrics.update(met.__name__, met(output, mask))
+                self.writer.add_image('input', make_grid(img.cpu(), nrow=8, normalize=True))
+
+        # add histogram of model parameters to the tensorboard
+        for name, p in self.model.named_parameters():
+            self.writer.add_histogram(name, p, bins='auto')
+        return self.valid_metrics.result()
+
+    def _valid_epoch_tile(self, epoch):
+        """
+        Validate with tile after training an epoch
+
+        :param epoch: Integer, current training epoch.
+        :return: A log that contains information about validation
+        """
+        tile_size = self.config["data_loader"]["args"]["tile_size"]
+ 
+        self.model.eval()
+        self.valid_metrics.reset()
+        with torch.no_grad():
+            for batch_idx, data in enumerate(self.valid_data_loader):
+                img, mask = data["image"], data["mask"]
+
+                # image to tile
+                mask_tiles = []
+                img_tiles, idxs = image2tile(img.numpy()[0].transpose((1, 2, 0)), size=tile_size)
+
+                # inference for tiles
+                for img_tile in img_tiles:
+                    # numpy to torch
+                    img_tile = torch.as_tensor(img_tile.transpose((2, 0, 1))[np.newaxis, ...])
+                    img_tile = img_tile.to(self.device)
+
+                    output_tile = self.model(img_tile)
+                    output_tile = output_tile.cpu().numpy()[0].transpose((1, 2, 0))
+                    mask_tiles.append(output_tile)
+                
+                # reconstruct tiles to image
+                output = tile2image(mask_tiles, idxs, mask.size()[1:])
+
+                # numpy output to tensor
+                output = torch.as_tensor(output.transpose((2, 0, 1))[np.newaxis, ...])
+
+                output, mask = output.to(self.device), mask.to(self.device)
+                loss = self.criterion(output, mask)
+
+                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
+                self.valid_metrics.update('loss', loss.item())
+                for met in self.metric_ftns:
+                    self.valid_metrics.update(met.__name__, met(output, mask))
+                self.writer.add_image('input', make_grid(img.cpu(), nrow=8, normalize=True))
+                print(batch_idx)
 
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():
