@@ -65,7 +65,7 @@ class Trainer(BaseTrainer):
                     epoch,
                     self._progress(batch_idx),
                     loss.item()))
-                self.writer.add_image('input', make_grid(img.cpu(), nrow=8, normalize=True))
+                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
             if batch_idx == self.len_epoch:
                 break
@@ -82,6 +82,7 @@ class Trainer(BaseTrainer):
         if self.lr_scheduler is not None:
             self.lr_scheduler.step(val_log['dice_score'])
         return log
+
 
     def _valid_epoch(self, epoch):
         """

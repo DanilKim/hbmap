@@ -34,6 +34,7 @@ class HBMapDataset(Dataset):
         if self.tfms:
             img = self.tfms(img)
             mask = self.tfms(mask)
+            
         return {
             'image': img,
             'mask': mask.squeeze(0).long(),
