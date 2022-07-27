@@ -25,7 +25,6 @@ def split_train_val(val_percent):
         for filename in val_list:
             f.write(filename+'\n')
     return
-    
 
 
 def get_args():
