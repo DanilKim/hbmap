@@ -12,8 +12,11 @@
     "data_loader": {
         "type": "HBMapDataLoader",
         "args":{
+            "images_dir": "/data/train_images",
+            "masks_dir": "/data/train_masks",
             "batch_size": 4,
-            "num_workers": 2
+            "image_size": 512,
+            "num_workers": 4
         }
     },
     "optimizer": {

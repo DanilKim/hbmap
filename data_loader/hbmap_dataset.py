@@ -14,7 +14,8 @@ class HBMapDataset(Dataset):
         self.tfms = tfms
 
         with open(self.split_file, 'r') as f:
-            self.ids = [x.strip() for x in f.readlines()]
+            data = [x.strip().split() for x in f.readlines()]
+            self.ids, self.labels = map(list, zip(*data))
 
         if not self.ids:
             raise RuntimeError(f'No input file found in {images_dir}, make sure you put your images there')
@@ -25,6 +26,7 @@ class HBMapDataset(Dataset):
 
     def __getitem__(self, idx):
         name = self.ids[idx]
+        cls = self.labels[idx]
         img = Image.open(os.path.join(self.images_dir, name+'.tiff'))
         mask = Image.open(os.path.join(self.masks_dir, name+'.png'))
 
@@ -37,6 +39,7 @@ class HBMapDataset(Dataset):
             
         return {
             'image': img,
+            'cls': cls,
             'mask': mask.squeeze(0).long(),
             'name': name
         }

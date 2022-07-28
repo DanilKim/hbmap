@@ -36,6 +36,7 @@ class Trainer(BaseTrainer):
         self.tile_validation = (self.config["data_loader"]["type"] == "HBMapTileDataLoader")
         print(f'tile validation: {self.tile_validation}')
 
+
     def _train_epoch(self, epoch):
         """
         Training logic for an epoch
@@ -46,8 +47,8 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         for batch_idx, data in enumerate(self.data_loader):
-            img, mask = data["image"], data["mask"]
-            img, mask = img.to(self.device), mask.to(self.device)
+            img, cls, mask = data["image"], data["cls"], data["mask"]
+            img, cls, mask = img.to(self.device), cls.to(self.devce), mask.to(self.device)
 
             self.optimizer.zero_grad()
             output = self.model(img)
@@ -65,7 +66,7 @@ class Trainer(BaseTrainer):
                     epoch,
                     self._progress(batch_idx),
                     loss.item()))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                self.writer.add_image('input', make_grid(img.cpu(), nrow=8, normalize=True))
 
             if batch_idx == self.len_epoch:
                 break
@@ -111,6 +112,7 @@ class Trainer(BaseTrainer):
         for name, p in self.model.named_parameters():
             self.writer.add_histogram(name, p, bins='auto')
         return self.valid_metrics.result()
+
 
     def _valid_epoch_tile(self, epoch):
         """
