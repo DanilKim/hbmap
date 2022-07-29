@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+from torchmetrics import F1Score
 
 
 def dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon=1e-6):
@@ -41,3 +42,22 @@ def dice_score(output: Tensor, target: Tensor, multiclass: bool = True):
     assert output.size() == target.size()
     fn = multiclass_dice_coeff if multiclass else dice_coeff
     return fn(output, target, reduce_batch_first=False).item()
+
+
+def accuracy(output, target):
+    with torch.no_grad():
+        pred = torch.argmax(output, dim=1)
+        assert pred.shape[0] == len(target)
+        correct = 0
+        correct += torch.sum(pred == target).item()
+    return correct / len(target)
+
+
+def f1_score(output, target):
+    with torch.no_grad():
+        n_classes = output.size(1)
+        device = output.get_device()
+        pred = torch.argmax(output, dim=1)
+        assert pred.shape[0] == len(target)
+        f1 = F1Score(num_classes=n_classes).to(device)
+    return f1(pred, target)

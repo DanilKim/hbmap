@@ -4,10 +4,11 @@ from pathlib import Path
 
 from PIL import Image
 from torch.utils.data import Dataset
+from torch import LongTensor
 
 
 class HBMapDataset(Dataset):
-    def __init__(self, split_file: str, images_dir: str, masks_dir: str, tfms):
+    def __init__(self, split_file: str, images_dir: str, masks_dir: str, n_class: int, tfms):
         self.split_file = split_file
         self.images_dir = Path(images_dir)
         self.masks_dir = Path(masks_dir)
@@ -39,7 +40,7 @@ class HBMapDataset(Dataset):
             
         return {
             'image': img,
-            'cls': cls,
+            'cls': int(cls),
             'mask': mask.squeeze(0).long(),
             'name': name
         }

@@ -30,8 +30,8 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_size))
 
-        self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
-        self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
+        self.train_metrics = MetricTracker('seg_loss', 'cls_loss', *[m.__name__ for m in self.metric_ftns["seg"] + self.metric_ftns["cls"]], writer=self.writer)
+        self.valid_metrics = MetricTracker('seg_loss', 'cls_loss', *[m.__name__ for m in self.metric_ftns["seg"] + self.metric_ftns["cls"]], writer=self.writer)
 
         self.tile_validation = (self.config["data_loader"]["type"] == "HBMapTileDataLoader")
         print(f'tile validation: {self.tile_validation}')
@@ -48,24 +48,35 @@ class Trainer(BaseTrainer):
         self.train_metrics.reset()
         for batch_idx, data in enumerate(self.data_loader):
             img, cls, mask = data["image"], data["cls"], data["mask"]
-            img, cls, mask = img.to(self.device), cls.to(self.devce), mask.to(self.device)
+            img, cls, mask = img.to(self.device), cls.to(self.device), mask.to(self.device)
 
-            self.optimizer.zero_grad()
-            output = self.model(img)
-            loss = self.criterion(output, mask)
-            loss.backward()
-            self.optimizer.step()
+            self.optimizer["seg"].zero_grad()
+            self.optimizer["cls"].zero_grad()
+
+            cls_logits, seg_logits = self.model(img)
+
+            seg_loss = self.criterion["seg"](seg_logits, mask)
+            cls_loss = self.criterion["cls"](cls_logits, cls)
+
+            seg_loss.backward(retain_graph=True)
+            cls_loss.backward()
+            self.optimizer["seg"].step()
+            self.optimizer["cls"].step()
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
-            self.train_metrics.update('loss', loss.item())
-            for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, mask))
+            self.train_metrics.update('seg_loss', seg_loss.item())
+            self.train_metrics.update('cls_loss', cls_loss.item())
+            for met in self.metric_ftns["seg"]:
+                self.train_metrics.update(met.__name__, met(seg_logits, mask))
+            for met in self.metric_ftns["cls"]:
+                self.train_metrics.update(met.__name__, met(cls_logits, cls))
 
             if batch_idx % self.log_step == 0:
-                self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
+                self.logger.debug('Train Epoch: {} {} Segmentation Loss: {:.6f} / Classification Loss: {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx),
-                    loss.item()))
+                    seg_loss.item(),
+                    cls_loss.item()))
                 self.writer.add_image('input', make_grid(img.cpu(), nrow=8, normalize=True))
 
             if batch_idx == self.len_epoch:
@@ -81,7 +92,7 @@ class Trainer(BaseTrainer):
             log.update(**{'val_'+k : v for k, v in val_log.items()})
 
         if self.lr_scheduler is not None:
-            self.lr_scheduler.step(val_log['dice_score'])
+            self.lr_scheduler["seg"].step(val_log['dice_score'])
         return log
 
 
@@ -96,16 +107,20 @@ class Trainer(BaseTrainer):
         self.valid_metrics.reset()
         with torch.no_grad():
             for batch_idx, data in enumerate(self.valid_data_loader):
-                img, mask = data["image"], data["mask"]
-                img, mask = img.to(self.device), mask.to(self.device)
+                img, cls, mask = data["image"], data["cls"], data["mask"]
+                img, cls, mask = img.to(self.device), cls.to(self.device), mask.to(self.device)
 
-                output = self.model(img)
-                loss = self.criterion(output, mask)
+                cls_logits, seg_logits = self.model(img)
+                seg_loss = self.criterion["seg"](seg_logits, mask)
+                cls_loss = self.criterion["cls"](cls_logits, cls)
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
-                self.valid_metrics.update('loss', loss.item())
-                for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, mask))
+                self.valid_metrics.update('seg_loss', seg_loss.item())
+                self.valid_metrics.update('cls_loss', cls_loss.item())
+                for met in self.metric_ftns["seg"]:
+                    self.valid_metrics.update(met.__name__, met(seg_logits, mask))
+                for met in self.metric_ftns["cls"]:
+                    self.valid_metrics.update(met.__name__, met(cls_logits, cls))
                 self.writer.add_image('input', make_grid(img.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard
@@ -173,3 +188,30 @@ class Trainer(BaseTrainer):
             current = batch_idx
             total = self.len_epoch
         return base.format(current, total, 100.0 * current / total)
+    
+
+    def _save_checkpoint(self, epoch, save_best=False):
+        """
+        Saving checkpoints
+
+        :param epoch: current epoch number
+        :param log: logging information of the epoch
+        :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
+        """
+        arch = type(self.model).__name__
+        state = {
+            'arch': arch,
+            'epoch': epoch,
+            'state_dict': self.model.state_dict(),
+            'seg_optimizer': self.optimizer["seg"].state_dict(),
+            'cls_optimizer': self.optimizer["cls"].state_dict(),
+            'monitor_best': self.mnt_best,
+            'config': self.config
+        }
+        filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
+        torch.save(state, filename)
+        self.logger.info("Saving checkpoint: {} ...".format(filename))
+        if save_best:
+            best_path = str(self.checkpoint_dir / 'model_best.pth')
+            torch.save(state, best_path)
+            self.logger.info("Saving current best: model_best.pth ...")

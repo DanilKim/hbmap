@@ -37,3 +37,27 @@ class UNet_CNet(nn.Module):
         x = self.up4(x, x1)
         seg_logits = self.outc(x)
         return cls_logits, seg_logits
+
+    def define_params_for_optimizer(self):
+        #seg_params = filter(lambda p: p.requires_grad, model.parameters())
+        seg_params = [
+            {'params': self.inc.parameters()},
+            {'params': self.down1.parameters()},
+            {'params': self.down2.parameters()},
+            {'params': self.down3.parameters()},
+            {'params': self.down4.parameters()},
+            {'params': self.up1.parameters()},
+            {'params': self.up2.parameters()},
+            {'params': self.up3.parameters()},
+            {'params': self.up4.parameters()},
+            {'params': self.outc.parameters()},
+        ]
+        cls_params = [
+            {'params': self.inc.parameters()},
+            {'params': self.down1.parameters()},
+            {'params': self.down2.parameters()},
+            {'params': self.down3.parameters()},
+            {'params': self.down4.parameters()},
+            {'params': self.cnet.parameters(), 'lr': 1e-3, 'weigth_decay': 1e-7},
+        ]
+        return seg_params, cls_params

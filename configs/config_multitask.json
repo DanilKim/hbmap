@@ -1,6 +1,6 @@
 {
     "name": "HBMap_UNet_Multitask",
-    "n_gpu": 1,
+    "n_gpu": 4,
 
     "arch": {
         "type": "UNet_CNet",
@@ -14,11 +14,11 @@
         "args":{
             "images_dir": "/data/train_images",
             "masks_dir": "/data/train_masks",
-            "split_file": "/data/train.txt",
+            "split_file": "/data/train_cls.txt",
             "shuffle": true,
-            "batch_size": 4,
+            "batch_size": 8,
             "image_size": 1024,
-            "num_workers": 2
+            "num_workers": 4
         }
     },
     "valid_data_loader": {
@@ -26,7 +26,7 @@
         "args":{
             "images_dir": "/data/train_images",
             "masks_dir": "/data/train_masks",
-            "split_file": "/data/val.txt",
+            "split_file": "/data/val_cls.txt",
             "shuffle": false,
             "batch_size": 1,
             "image_size": 1024,
@@ -44,16 +44,18 @@
     "cls_optimizer": {
         "type": "Adam",
         "args":{
-            "lr": 1e-3,
-            "weight_decay": 1e-7,
-            "momentum": 0.9
+            "lr": 1e-4,
+            "weight_decay": 1e-8
         }
     },
-    "seg_loss": "ce_loss",
-    "metrics": [
-        "dice_score",
+    "cls_loss": "ce_loss",
+    "seg_loss": "ce_with_dice_loss",
+    "cls_metrics": [
         "accuracy",
         "f1_score"
+    ],
+    "seg_metrics": [
+        "dice_score"
     ],
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",

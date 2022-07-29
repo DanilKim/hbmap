@@ -1,3 +1,6 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,5"
+
 import argparse
 import collections
 from random import shuffle
@@ -23,12 +26,15 @@ def main(config):
     logger = config.get_logger('train')
 
     # setup data_loader instances
-    data_loader = config.init_obj('data_loader', module_data)
-    valid_data_loader = config.init_obj('valid_data_loader', module_data)
+    n_classes = config['arch']['args']['n_classes']
+    data_loader = config.init_obj('data_loader', module_data, n_classes=n_classes)
+    valid_data_loader = config.init_obj('valid_data_loader', module_data, n_classes=n_classes)
 
     # build model architecture, then print to console
     model = config.init_obj('arch', module_arch)
     logger.info(model)
+
+    seg_params, cls_params = model.define_params_for_optimizer()
 
     # prepare for (multi-device) GPU training
     device, device_ids = prepare_device(config['n_gpu'])
@@ -41,19 +47,28 @@ def main(config):
         "cls": getattr(module_loss, config['cls_loss']),
         "seg": getattr(module_loss, config['seg_loss'])
     }
-    metrics = [getattr(module_metric, met) for met in config['metrics']]
+    metrics = {
+        "cls": [getattr(module_metric, met) for met in config['cls_metrics']],
+        "seg": [getattr(module_metric, met) for met in config['seg_metrics']]
+    }
 
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
-    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
-    lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
+    
+    optimizers = {
+        "cls": config.init_obj('cls_optimizer', torch.optim, cls_params),
+        "seg": config.init_obj('seg_optimizer', torch.optim, seg_params)
+    }
+    lr_schedulers = {
+        "cls": config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizers["cls"]),
+        "seg": config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizers["seg"]),
+    }
 
-    trainer = Trainer(model, criterions, metrics, optimizer,
+    trainer = Trainer(model, criterions, metrics, optimizers,
                       config=config,
                       device=device,
                       data_loader=data_loader,
                       valid_data_loader=valid_data_loader,
-                      lr_scheduler=lr_scheduler)
+                      lr_scheduler=lr_schedulers)
 
     trainer.train()
 

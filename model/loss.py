@@ -6,6 +6,8 @@ from model.metric import multiclass_dice_coeff, dice_coeff
 
 
 def ce_loss(output: Tensor, target: Tensor):
+    if output.dim() == 1:
+        output = output.unsqueeze(0)
     return F.cross_entropy(output, target)
 
 

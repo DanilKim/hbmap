@@ -9,7 +9,7 @@ class HBMapDataLoader(BaseDataLoader):
     """
     HuBMAP data loading using BaseDataLoader
     """
-    def __init__(self, images_dir, masks_dir, split_file, batch_size, shuffle, image_size, num_workers=1):
+    def __init__(self, images_dir, masks_dir, split_file, batch_size, shuffle, n_classes, image_size, num_workers=1):
         if image_size:
             tfms = transforms.Compose([
                 transforms.Resize(image_size),
@@ -20,5 +20,5 @@ class HBMapDataLoader(BaseDataLoader):
                 transforms.ToTensor(),
             ])
 
-        self.dataset = HBMapDataset(split_file, images_dir, masks_dir, tfms)
+        self.dataset = HBMapDataset(split_file, images_dir, masks_dir, n_classes, tfms)
         super().__init__(self.dataset, batch_size, shuffle, 0.0, num_workers)
