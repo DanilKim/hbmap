@@ -17,7 +17,7 @@ class UNet_CNet(nn.Module):
         self.down3 = Down(256, 512)
         factor = 2 if bilinear else 1
         self.down4 = Down(512, 1024 // factor)
-        self.cnet = CNet(1024, n_classes)
+        self.cnet = CNet(1024, 32, n_classes)
         self.up1 = Up(1024, 512 // factor, bilinear)
         self.up2 = Up(512, 256 // factor, bilinear)
         self.up3 = Up(256, 128 // factor, bilinear)
