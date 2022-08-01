@@ -1,17 +1,23 @@
 import logging
 import os
+import random
 from pathlib import Path
 
 from PIL import Image
+import torch
+from torchvision import transforms
 from torch.utils.data import Dataset
 
 
 class HBMapDataset(Dataset):
-    def __init__(self, split_file: str, images_dir: str, masks_dir: str, tfms):
+    def __init__(self, split_file: str, images_dir: str, masks_dir: str, tfms, augs):
         self.split_file = split_file
         self.images_dir = Path(images_dir)
         self.masks_dir = Path(masks_dir)
         self.tfms = tfms
+        self.augs = augs
+        if self.augs:
+            self.flip = transforms.RandomHorizontalFlip(p=1.0)
 
         with open(self.split_file, 'r') as f:
             self.ids = [x.strip() for x in f.readlines()]
@@ -34,6 +40,13 @@ class HBMapDataset(Dataset):
         if self.tfms:
             img = self.tfms(img)
             mask = self.tfms(mask)
+        
+        if self.augs:
+            img = self.augs(img)
+            flip = random.randint(0,1)
+            if flip:
+                img = self.flip(img)
+                mask = self.flip(mask)
             
         return {
             'image': img,
