@@ -15,6 +15,16 @@ class AddGaussianNoise(object):
     def __repr__(self):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
+class AddGaussianBlur(kernal_size= tuple, sigma = tuple):
+    def __init__(self, kernelsize = (7,12), sigma= (9,11)):
+        self.kernelsize = kernelsize
+        self.sigma = sigma
+
+    def __call__(self):
+        return transforms.GaussianBlur(self.kernelsize, self.sigma)
+
+    def __message__(self):
+        return self.__class__.__name__ + '(kernel_size = {0}, sigma={1}'.format(self.kernelsize, self.sigma)
 
 class HBMapDataLoader(BaseDataLoader):
     """
