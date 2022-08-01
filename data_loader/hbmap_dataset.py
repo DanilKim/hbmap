@@ -9,14 +9,32 @@ from torchvision import transforms
 from torch.utils.data import Dataset
 
 
+class AddGaussianNoise(object):
+    def __init__(self, mean=0., std=1.):
+        self.std = std
+        self.mean = mean
+        
+    def __call__(self, tensor):
+        return tensor + torch.randn(tensor.size()) * self.std + self.mean
+    
+    def __repr__(self):
+        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+
+
 class HBMapDataset(Dataset):
-    def __init__(self, split_file: str, images_dir: str, masks_dir: str, tfms, augs):
+    def __init__(self, split_file: str, images_dir: str, masks_dir: str, tfms, augment):
         self.split_file = split_file
         self.images_dir = Path(images_dir)
         self.masks_dir = Path(masks_dir)
         self.tfms = tfms
-        self.augs = augs
-        if self.augs:
+        self.norm = transforms.Compose([
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])
+        self.augment = augment
+        if self.augment:
+            self.augs = transforms.Compose([
+                AddGaussianNoise(0., 0.5,)
+            ])
             self.flip = transforms.RandomHorizontalFlip(p=1.0)
 
         with open(self.split_file, 'r') as f:
@@ -41,7 +59,8 @@ class HBMapDataset(Dataset):
             img = self.tfms(img)
             mask = self.tfms(mask)
         
-        if self.augs:
+        img = self.norm(img)
+        if self.augment:
             img = self.augs(img)
             flip = random.randint(0,1)
             if flip:
