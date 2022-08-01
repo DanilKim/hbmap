@@ -16,6 +16,7 @@
             "masks_dir": "/data/train_masks",
             "split_file": "/data/train.txt",
             "shuffle": true,
+            "augment": true,
             "batch_size": 4,
             "image_size": 1024,
             "num_workers": 2
@@ -28,6 +29,7 @@
             "masks_dir": "/data/train_masks",
             "split_file": "/data/val.txt",
             "shuffle": false,
+            "augment": false,
             "batch_size": 1,
             "image_size": 1024,
             "num_workers": 2
