@@ -1,0 +1,67 @@
+{
+    "name": "LIVECell_UNet",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "UNet",
+        "args": {
+            "n_channels": 3,
+            "n_classes": 2
+        }
+    },
+    "data_loader": {
+        "type": "LIVECellDataLoader",
+        "args":{
+            "images_dir": "/data/images/livecell_train_val_images",
+            "masks_dir": "/data/masks/train",
+            "split_file": "/data/train.txt",
+            "shuffle": true,
+            "batch_size": 4,
+            "image_size": 1024,
+            "num_workers": 2
+        }
+    },
+    "valid_data_loader": {
+        "type": "LIVECellDataLoader",
+        "args":{
+            "images_dir": "/data/images/livecell_test_images",
+            "masks_dir": "/data/masks/test",
+            "split_file": "/data/test.txt",
+            "shuffle": false,
+            "batch_size": 1,
+            "image_size": 1024,
+            "num_workers": 2
+        }
+    },
+    "optimizer": {
+        "type": "RMSprop",
+        "args":{
+            "lr": 1e-4,
+            "weight_decay": 1e-8,
+            "momentum": 0.9
+        }
+    },
+    "loss": "ce_with_dice_loss",
+    "metrics": [
+        "dice_score"
+    ],
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "mode": "max",
+            "patience": 2
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+
+        "save_dir": "saved/",
+        "save_period": 1,
+        "verbosity": 2,
+        
+        "monitor": "min val_loss",
+        "early_stop": 5,
+
+        "tensorboard": true
+    }
+}
