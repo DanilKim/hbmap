@@ -9,7 +9,7 @@ from utils import read_json, write_json
 
 
 class ConfigParser:
-    def __init__(self, config, resume=None, modification=None, run_id=None):
+    def __init__(self, config, resume=None, modification=None, pretrained=None, run_id=None):
         """
         class to parse configuration json file. Handles hyperparameters for training, initializations of modules, checkpoint saving
         and logging module.
@@ -21,6 +21,7 @@ class ConfigParser:
         # load config file and apply modification
         self._config = _update_config(config, modification)
         self.resume = resume
+        self.pretrained = pretrained
 
         # set save_dir where trained model and log will be saved.
         save_dir = Path(self.config['trainer']['save_dir'])
@@ -56,14 +57,19 @@ class ConfigParser:
             args.add_argument(*opt.flags, default=None, type=opt.type)
         if not isinstance(args, tuple):
             args = args.parse_args()
-
         if args.resume is not None:
             resume = Path(args.resume)
+            pretrained = None
             cfg_fname = resume.parent / 'config.json'
+        elif args.pretrained is not None:
+            pretrained = Path(args.pretrained)
+            resume = None
+            cfg_fname = Path(args.config)
         else:
             msg_no_cfg = "Configuration file need to be specified. Add '-c config.json', for example."
             assert args.config is not None, msg_no_cfg
             resume = None
+            pretrained = None
             cfg_fname = Path(args.config)
         
         config = read_json(cfg_fname)
@@ -73,7 +79,7 @@ class ConfigParser:
 
         # parse custom cli options into dictionary
         modification = {opt.target : getattr(args, _get_opt_name(opt.flags)) for opt in options}
-        return cls(config, resume, modification)
+        return cls(config, resume, modification, pretrained)
 
     def init_obj(self, name, module, *args, **kwargs):
         """

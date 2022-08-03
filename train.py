@@ -28,12 +28,21 @@ def main(config):
 
     # build model architecture, then print to console
     model = config.init_obj('arch', module_arch)
-    logger.info(model)
+    # logger.info(model)
+
+    # pretrained model load
+    if config.pretrained is not None:
+        logger.info('Loading checkpoint: {} ...'.format(config.pretrained))
+        checkpoint = torch.load(config.pretrained)
+        state_dict = checkpoint['state_dict']
+        if checkpoint['config']['n_gpu'] > 1:
+            model = torch.nn.DataParallel(model)
+        model.load_state_dict(state_dict)
 
     # prepare for (multi-device) GPU training
     device, device_ids = prepare_device(config['n_gpu'])
     model = model.to(device)
-    if len(device_ids) > 1:
+    if not config.pretrained and len(device_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=device_ids)
 
     # get function handles of loss and metrics
@@ -61,6 +70,8 @@ if __name__ == '__main__':
                       help='config file path (default: None)')
     args.add_argument('-r', '--resume', default=None, type=str,
                       help='path to latest checkpoint (default: None)')
+    args.add_argument('-p', '--pretrained', default=None, type=str,
+                      help='path to pretrained pth (default: None)')
 
     # custom cli options to modify configuration from default values given in json file.
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
