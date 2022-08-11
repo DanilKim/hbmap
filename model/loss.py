@@ -3,7 +3,7 @@ from torch import Tensor
 import torch
 
 from model.metric import multiclass_dice_coeff, dice_coeff
-
+from utils.util_train import *
 
 def ce_loss(output: Tensor, target: Tensor):
     return F.cross_entropy(output, target)
@@ -21,3 +21,15 @@ def dice_loss(output: Tensor, target: Tensor, multiclass: bool = True):
 
 def ce_with_dice_loss(output: Tensor, target: Tensor):
     return ce_loss(output, target) + dice_loss(output, target, multiclass=True)
+
+def bce_loss(output: Tensor, target: Tensor):
+    return F.binary_cross_entropy_with_logits(output, target)
+
+def symmetric_lovasz(outputs, targets):
+    return 0.5*(lovasz_hinge(outputs, targets) + lovasz_hinge(-outputs, 1.0 - targets))
+
+def deep_supervision_symmetric_lovasz(outputs, targets):
+    loss = symmetric_lovasz(outputs[0], targets)
+    for out in outputs[1]:
+        loss += symmetric_lovasz(out, targets)
+    return loss
